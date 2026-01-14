@@ -1,0 +1,704 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>将棋ダイス 3×4（スマホ向けタップ最適化）</title>
+<style>
+  :root{
+    --red:#e74c3c;
+    --blue:#3498db;
+    --board:#f5f5f5;
+    --cell:#fff;
+    --cell-border:#bbb;
+    --hilight:#ffeaa7;
+    --text:#2c3e50;
+    --hand-bg:#f0f4ff;
+    --bin-bg:#f7f7f7;
+    --territory-red:#ffeceb;
+    --territory-blue:#eaf3ff;
+    --own-strong:#fff6c7;
+  }
+  /* ベース */
+  html,body{ height:100%; }
+  body{
+    font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;
+    color:var(--text); margin:0; padding:16px; background:#fafafa;
+    -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  h1{ margin:0 0 12px; font-size:20px; }
+
+  .top{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px; }
+  .panel{ background:#fff; border:1px solid #ddd; border-radius:12px; padding:12px; }
+  .panel h2{ font-size:16px; margin:0 0 8px; }
+  .panel h3{ font-size:14px; margin:10px 0 6px; }
+  .controls{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .controls button, .controls select{
+    padding:10px 14px; font-size:15px; border-radius:10px; touch-action:manipulation;
+  }
+  .controls .spacer{ flex:1; }
+
+  .dice-list{ display:flex; flex-wrap:wrap; gap:8px; }
+  .die-card{
+    border:1px solid #ccc; border-radius:12px; padding:10px; width:168px; background:#fff;
+    min-height:64px;
+  }
+  .die-title{ font-size:12px; opacity:0.75; }
+  .die-face{ font-size:24px; font-weight:700; margin:4px 0; }
+  .draggable{ cursor:grab; }
+  .tag{ display:inline-block; padding:2px 6px; border-radius:999px; font-size:12px; color:#fff; }
+  .tag.red{ background:var(--red); }
+  .tag.blue{ background:var(--blue); }
+  .tag.none{ background:#777; }
+
+  .selected-card{ outline:3px solid #2ecc71; }
+
+  .marker-card{
+    border:2px solid #222; border-radius:12px; padding:10px; width:168px; background:#fff; font-weight:700;
+    display:inline-flex; align-items:center; gap:8px; margin:8px 0;
+  }
+  .marker-dot{ display:inline-block; width:12px; height:12px; border-radius:999px; }
+  .marker-red{ background:var(--red); }
+  .marker-blue{ background:var(--blue); }
+  .marker-none{ background:#777; }
+
+  .bins{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; margin-top:8px; }
+  .bin{
+    background:var(--bin-bg); border:2px dashed #ccc; border-radius:12px; padding:8px; min-height:140px;
+    touch-action:manipulation;
+  }
+  .bin.hilite{ border-color:#2ecc71; background:#eaffea; }
+  .bin-title{ font-weight:600; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+  .bin-title .first-badge{ font-size:12px; padding:2px 6px; border-radius:999px; color:#fff; background:#222; }
+  .selected-bin{ outline:3px solid #2ecc71; }
+
+  .play-wrap{ display:grid; grid-template-columns: 220px 1fr 220px; gap:16px; align-items:start; }
+  .hand{
+    background:var(--hand-bg); border:1px solid #c7d8ff; border-radius:12px; padding:8px; min-height:260px;
+  }
+  .hand h3{ margin:0 0 8px; font-size:14px; }
+  .hand-list{ display:flex; flex-wrap:wrap; gap:8px; }
+  .hand-item{
+    padding:10px 12px; border-radius:10px; color:#fff; font-weight:700;
+    display:inline-flex; align-items:center; justify-content:center; min-width:44px; min-height:44px;
+    border:2px solid transparent; touch-action:manipulation;
+  }
+  .hand-item.red{ background:var(--red); }
+  .hand-item.blue{ background:var(--blue); }
+  .hand-item.selected{ border-color:#2ecc71; }
+
+  /* 盤は比率で可変 */
+  .board{
+    width:min(92vw, 480px);
+    aspect-ratio: 3 / 4;                   /* 幅:高さ = 3:4 */
+    background:var(--board);
+    border:2px solid #999; border-radius:12px; display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    overflow:hidden;
+    margin:0 auto;
+    touch-action:manipulation;
+  }
+  .cell{
+    border:1px solid var(--cell-border);
+    background:var(--cell);
+    position:relative; cursor:pointer;
+  }
+  /* 陣色（常時）＋手番側強調 */
+  .territory-red{ background:var(--territory-red); }
+  .territory-blue{ background:var(--territory-blue); }
+  .own-strong{ box-shadow: inset 0 0 0 9999px var(--own-strong); }
+
+  .cell.hilight{ outline:3px solid var(--hilight); z-index:1; }
+  .cell.drop-hilite{ background:#f0fff0; }
+
+  .piece{
+    position:absolute; inset:6px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:700; color:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.25);
+    user-select:none;
+  }
+  .piece.red{ background:var(--red); }
+  .piece.blue{ background:var(--blue); }
+  .piece.small{ filter:brightness(1.05); }
+  .piece.selected{ outline:3px solid #2ecc71; }
+
+  /* 文字の向き：赤=180°, 青=0°（互いに向く） */
+  .face-label{ display:inline-block; transform-origin:center; }
+  .face-red{ transform: rotate(180deg); }
+  .face-blue{ transform: rotate(0deg); }
+
+  .ghost{ opacity:0.55; border:2px dashed rgba(0,0,0,0.4); }
+
+  .status{ font-size:14px; padding:8px; background:#fff; border:1px solid #ddd; border-radius:12px; margin-top:8px; }
+
+  /* スマホ（タッチ）向けレイアウト最適化 */
+  @media (max-width: 768px){
+    .top{ grid-template-columns: 1fr; }
+    .play-wrap{ grid-template-columns: 1fr; }
+    .hand{ min-height: auto; }
+    .board{ width: 96vw; }
+    .controls button, .controls select{ padding:10px 12px; font-size:16px; }
+  }
+
+  /* iOSセーフエリア */
+  .safe-bottom{ padding-bottom: env(safe-area-inset-bottom); }
+</style>
+</head>
+<body class="safe-bottom">
+
+<h1>将棋ダイス 3×4（スマホ向けタップ最適化）</h1>
+
+<div class="top">
+  <!-- 親フェーズ -->
+  <div class="panel">
+    <h2>親フェーズ（タップ／ドラッグで配分）</h2>
+    <div class="controls">
+      <button id="rerollAll">7個の駒を振り直す</button>
+      <button id="lockAssignment">この配分で確定（子フェーズへ）</button>
+      <span class="spacer"></span>
+      <label style="display:inline-flex; align-items:center; gap:6px;">
+        <input type="checkbox" id="tapModeToggle"/>
+        タップ配分モード
+      </label>
+      <button id="cancelAssign" style="display:none;">配分選択キャンセル</button>
+    </div>
+
+    <h3>振られた駒（参照）＋ 先手マーカー</h3>
+    <div class="dice-list" id="dicePool"></div>
+    <div class="marker-card" id="firstMarkerToken" title="（スマホ）タップしてビンをタップして先手を配分">
+      <span class="marker-dot marker-none"></span>先手マーカー（赤/青/未へ配分）
+    </div>
+
+    <h3>配分先（赤／未／青）</h3>
+    <div class="bins">
+      <div class="bin" id="binRed">
+        <div class="bin-title">
+          赤軍（小駒/先手）
+          <span class="first-badge" id="badgeRed" style="display:none;">先手</span>
+        </div>
+        <div class="dice-list" id="binRedList"></div>
+      </div>
+      <div class="bin" id="binNone">
+        <div class="bin-title">未配分</div>
+        <div class="dice-list" id="binNoneList"></div>
+      </div>
+      <div class="bin" id="binBlue">
+        <div class="bin-title">
+          青軍（小駒/先手）
+          <span class="first-badge" id="badgeBlue" style="display:none;">先手</span>
+        </div>
+        <div class="dice-list" id="binBlueList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 子フェーズ／状態 -->
+  <div class="panel">
+    <h2>子フェーズ（軍選択 → 大将配置 → 対局）</h2>
+    <div class="controls" id="childControls">
+      <div>どちらの軍で対局しますか？</div>
+      <button id="chooseRed">赤軍を選ぶ</button>
+      <button id="chooseBlue">青軍を選ぶ</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<!-- 対局エリア：スマホでは縦積み -->
+<div class="play-wrap">
+  <div class="hand">
+    <h3>赤軍の持ち駒（タップ→盤タップで打てます／ドラッグも可）</h3>
+    <div id="redHand" class="hand-list"></div>
+  </div>
+  <div>
+    <div id="board" class="board"></div>
+    <div class="status">
+      操作：<br/>
+      ・親：小駒A/Bをタップ→赤/未/青のビンをタップで配分（ドラッグも可）。<br/>
+      ・先手マーカー：マーカーをタップ→ビンをタップで配分。<br/>
+      ・子：軍選択→双方の大将を自陣へ1枚配置（先手側から）。<br/>
+      ・対局：持ち駒をタップ→盤のマスをタップで打つ（ドラッグでも可）。<br/>
+      ・成る条件で振り直し可。敵大将を取れば勝利。<br/>
+      <button id="cancelDrop" style="margin-top:8px; display:none;">打ち選択をキャンセル</button>
+    </div>
+  </div>
+  <div class="hand">
+    <h3>青軍の持ち駒（タップ→盤タップで打てます／ドラッグも可）</h3>
+    <div id="blueHand" class="hand-list"></div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+/** === 定数 === **/
+const FACES_GENERAL = ['歩','香','桂','銀','金','角','飛','王'];
+const FACES_A       = ['歩','香','桂','金','角','飛'];
+const FACES_B       = ['歩','香','桂','銀','角','飛'];
+const SIDES = { RED:'RED', BLUE:'BLUE' };
+const DIRECTIONS = { RED:+1, BLUE:-1 };
+const BOARD_ROWS = 4, BOARD_COLS = 3;
+const RED_TERRITORY_ROWS = [0,1];
+const BLUE_TERRITORY_ROWS = [2,3];
+
+/** === 状態 === **/
+let game = {
+  phase: 'PARENT',
+  firstMarker: null,
+  childChoice: null,
+  board: createEmptyBoard(),
+  dice: [],
+  hands: { RED:[], BLUE:[] },
+  turn: null,
+  selectedPieceId: null,
+  pendingDropPieceId: null,
+  generalsPlaced: { RED:false, BLUE:false },
+  ui: {
+    tapMode: window.matchMedia && window.matchMedia('(pointer: coarse)').matches, // タッチ端末ならON
+    selectedAssignId: null,   // 親フェーズ：小駒カード選択（タップ配分）
+    selectedMarker: false,    // 親フェーズ：先手マーカー選択中
+    selectedBin: null         // 親フェーズ：タップ配分で最後にタップしたビン
+  }
+};
+
+function createEmptyBoard(){ const b=[]; for(let r=0;r<BOARD_ROWS;r++){ const row=[]; for(let c=0;c<BOARD_COLS;c++) row.push(null); b.push(row);} return b; }
+function isRedTerritory(r){ return RED_TERRITORY_ROWS.includes(r); }
+function isBlueTerritory(r){ return BLUE_TERRITORY_ROWS.includes(r); }
+function inBounds(r,c){ return r>=0 && r<BOARD_COLS && c<BOARD_COLS; } // ← 修正: ただし下で使うinBoundsを再定義
+function inBoundsRC(r,c){ return r>=0 && r<BOARD_ROWS && c>=0 && c<BOARD_COLS; }
+function rollFaceByType(type){ const arr=(type==='G_RED'||type==='G_BLUE')?FACES_GENERAL:(type==='A'?FACES_A:FACES_B); return arr[Math.floor(Math.random()*arr.length)]; }
+function makeDie(id,type,face,owner=null){ return { id, type, face, owner, pos:null }; }
+function dieLabel(type){ if(type==='G_RED') return '大将（赤・8面）'; if(type==='G_BLUE') return '大将（青・8面）'; if(type==='A') return '小駒A（6面：歩/香/桂/金/角/飛）'; if(type==='B') return '小駒B（6面：歩/香/桂/銀/角/飛）'; return ''; }
+function getDieById(id){ return game.dice.find(d=>d.id===id)||game.hands.RED.find(d=>d.id===id)||game.hands.BLUE.find(d=>d.id===id)||null; }
+function removeFromHand(owner, id){ const i=game.hands[owner].findIndex(d=>d.id===id); if(i>=0) game.hands[owner].splice(i,1); }
+function territoryCategory(side, r){ return (side===SIDES.RED)?(isRedTerritory(r)?'OWN':'ENEMY'):(isBlueTerritory(r)?'OWN':'ENEMY'); }
+
+/** 初期化（親フェーズ） **/
+function initParentPhase(){
+  game.phase='PARENT';
+  game.board=createEmptyBoard();
+  game.hands.RED=[]; game.hands.BLUE=[];
+  game.turn=null;
+  game.generalsPlaced.RED=false; game.generalsPlaced.BLUE=false;
+  game.selectedPieceId=null; game.pendingDropPieceId=null;
+
+  let id=1; const d=[];
+  d.push(makeDie(id++,'G_RED', rollFaceByType('G_RED'), SIDES.RED));
+  d.push(makeDie(id++,'G_BLUE',rollFaceByType('G_BLUE'),SIDES.BLUE));
+  for(let i=0;i<2;i++) d.push(makeDie(id++,'A', rollFaceByType('A'), null));
+  for(let i=0;i<3;i++) d.push(makeDie(id++,'B', rollFaceByType('B'), null));
+  game.dice=d;
+
+  const st=document.getElementById('status');
+  if(st) st.textContent='親フェーズ：小駒A/Bをタップ→赤/未/青のビンをタップで配分（ドラッグも可）。先手マーカーも同様に配分してください。';
+  renderAll();
+}
+
+/** 親フェーズ操作 **/
+function rerollAllDice(){ for(const die of game.dice){ die.face=rollFaceByType(die.type); } renderAll(); }
+function populateHandsFromAssigned(){
+  for(const d of game.dice){
+    if((d.type==='A'||d.type==='B') && d.owner && d.pos===null){
+      const hand=game.hands[d.owner]; if(!hand.some(x=>x.id===d.id)) hand.push(d);
+    }
+  }
+}
+function lockAssignment(){
+  populateHandsFromAssigned();
+  game.phase='CHILD_SELECT';
+  const st=document.getElementById('status');
+  const firstMsg = game.firstMarker ? `（先手：${game.firstMarker==='RED'?'赤':'青'}）` : '（先手：未設定→赤が先）';
+  if(st) st.textContent='子フェーズ：どちらの軍で対局するか選んでください。選択後、大将配置へ。' + firstMsg;
+  renderAll();
+}
+
+/** タップ配分操作（スマホ向け） **/
+function onTapToggle(){
+  const chk=document.getElementById('tapModeToggle');
+  game.ui.tapMode = !!chk.checked;
+  // 解除時は選択状態もクリア
+  if(!game.ui.tapMode){
+    game.ui.selectedAssignId=null;
+    game.ui.selectedMarker=false;
+    game.ui.selectedBin=null;
+    document.getElementById('cancelAssign').style.display='none';
+    renderAll();
+  }
+}
+function selectAssignDie(id){
+  if(!game.ui.tapMode || game.phase!=='PARENT') return;
+  const die=getDieById(id); if(!die || die.type==='G_RED' || die.type==='G_BLUE') return;
+  game.ui.selectedAssignId=id;
+  game.ui.selectedMarker=false;
+  document.getElementById('cancelAssign').style.display='inline-block';
+  const st=document.getElementById('status'); if(st) st.textContent='配分選択：配分先のビン（赤／未／青）をタップしてください。';
+  renderAll();
+}
+function selectMarker(){
+  if(!game.ui.tapMode || game.phase!=='PARENT') return;
+  game.ui.selectedMarker=true;
+  game.ui.selectedAssignId=null;
+  document.getElementById('cancelAssign').style.display='inline-block';
+  const st=document.getElementById('status'); if(st) st.textContent='先手マーカー：配分先のビン（赤／未／青）をタップしてください。';
+  renderAll();
+}
+function cancelAssign(){
+  game.ui.selectedAssignId=null;
+  game.ui.selectedMarker=false;
+  game.ui.selectedBin=null;
+  document.getElementById('cancelAssign').style.display='none';
+  const st=document.getElementById('status'); if(st) st.textContent='親フェーズ：小駒をタップ→ビンをタップで配分。先手も同様。';
+  renderAll();
+}
+function tapBin(owner){ // owner: RED/BLUE/null
+  if(!game.ui.tapMode || game.phase!=='PARENT') return;
+  game.ui.selectedBin = owner;
+  if(game.ui.selectedMarker){
+    game.firstMarker = owner || null;
+    cancelAssign();
+    renderAll();
+    return;
+  }
+  if(game.ui.selectedAssignId){
+    const d=getDieById(game.ui.selectedAssignId);
+    if(d && (d.type==='A'||d.type==='B')){
+      d.owner = owner || null;
+      cancelAssign();
+      renderAll();
+    }
+  }
+}
+
+/** 子フェーズ／大将配置／対局 **/
+function chooseSide(side){
+  game.childChoice=side; game.phase='PLACE_GENERALS';
+  game.turn = game.firstMarker || SIDES.RED;
+  const st=document.getElementById('status'); if(st) st.textContent=`大将配置：${game.turn==='RED'?'赤':'青'}軍から自陣の好きなマスへ大将駒を置いてください。`;
+  renderAll();
+}
+function placeGeneralAt(r,c){
+  if(game.phase!=='PLACE_GENERALS') return;
+  const turnSide=game.turn;
+  const canPlace=(turnSide===SIDES.RED && isRedTerritory(r))||(turnSide===SIDES.BLUE && isBlueTerritory(r));
+  if(!canPlace || game.board[r][c]!==null) return;
+  const generalType=turnSide===SIDES.RED?'G_RED':'G_BLUE';
+  const general=game.dice.find(d=>d.type===generalType && d.pos===null); if(!general) return;
+
+  general.pos={r,c}; game.board[r][c]=general.id; game.generalsPlaced[turnSide]=true;
+
+  const other=turnSide===SIDES.RED?SIDES.BLUE:SIDES.RED; const st=document.getElementById('status');
+  if(!game.generalsPlaced[other]){ game.turn=other; if(st) st.textContent=`大将配置：${game.turn==='RED'?'赤':'青'}軍の番。自陣の好きなマスへ置いてください。`; }
+  else { game.phase='PLAY'; game.turn=game.firstMarker || SIDES.RED; if(st) st.textContent=`対局開始：${game.turn==='RED'?'赤':'青'}軍の手番。持ち駒をタップ→盤タップで打てます（ドラッグも可）。`; }
+  renderAll();
+}
+
+/** 盤クリック（移動／打ち） **/
+function onCellClick(r,c){
+  if(game.phase==='PLACE_GENERALS'){ placeGeneralAt(r,c); return; }
+  if(game.phase!=='PLAY') return;
+
+  if(game.pendingDropPieceId){
+    if(game.board[r][c]!==null) return;
+    const piece=getDieById(game.pendingDropPieceId); if(!piece) return;
+    piece.pos={r,c}; piece.owner=game.turn; game.board[r][c]=piece.id;
+    removeFromHand(game.turn, piece.id);
+    game.pendingDropPieceId=null;
+    document.getElementById('cancelDrop').style.display='none';
+    endTurn(); return;
+  }
+
+  const pid=game.board[r][c];
+  if(game.selectedPieceId===null){
+    if(pid===null) return;
+    const piece=getDieById(pid); if(!piece || piece.owner!==game.turn) return;
+    game.selectedPieceId=pid; renderAll(); return;
+  }else{
+    const selected=getDieById(game.selectedPieceId);
+    if(!selected || !selected.pos){ game.selectedPieceId=null; renderAll(); return; }
+    const legal=computeLegalMoves(selected);
+    const ok=legal.some(p=>p.r===r && p.c===c);
+    if(!ok){
+      if(pid!==null){ const piece=getDieById(pid); if(piece && piece.owner===game.turn){ game.selectedPieceId=pid; renderAll(); return; } }
+      game.selectedPieceId=null; renderAll(); return;
+    }
+    const from=selected.pos, to={r,c}; const capturedId=game.board[r][c];
+    game.board[from.r][from.c]=null;
+
+    if(capturedId!==null){
+      const captured=getDieById(capturedId);
+      if(captured && (captured.type==='G_RED'||captured.type==='G_BLUE')){
+        game.board[to.r][to.c]=selected.id; selected.pos=to; game.selectedPieceId=null; renderAll();
+        alert(`${game.turn==='RED'?'赤':'青'}軍の勝利！敵大将を取りました。`);
+        initParentPhase(); return;
+      }else if(captured){
+        captured.pos=null; captured.owner=game.turn; game.hands[game.turn].push(captured);
+      }
+    }
+
+    game.board[to.r][to.c]=selected.id; selected.pos=to;
+
+    const movedSide=selected.owner;
+    const fromCat=territoryCategory(movedSide, from.r);
+    const toCat=territoryCategory(movedSide, to.r);
+    const canPromote=(fromCat==='OWN'&&toCat==='ENEMY')||(fromCat==='ENEMY'&&toCat==='OWN')||(fromCat==='ENEMY'&&toCat==='ENEMY');
+    if(canPromote){ const doPromote=confirm('「成る」（振り直し）しますか？'); if(doPromote){ selected.face=rollFaceByType(selected.type); } }
+
+    game.selectedPieceId=null; endTurn();
+  }
+}
+function endTurn(){
+  game.turn=(game.turn===SIDES.RED)?SIDES.BLUE:SIDES.RED;
+  const st=document.getElementById('status'); if(st) st.textContent=`対局中：${game.turn==='RED'?'赤':'青'}軍の手番です。`;
+  renderAll();
+}
+
+/** 合法手生成 **/
+function computeLegalMoves(piece){
+  const res=[]; const dir=DIRECTIONS[piece.owner]; const {r,c}=piece.pos;
+  const addIf=(nr,nc)=>{ if(!inBoundsRC(nr,nc)) return; const occ=game.board[nr][nc]; if(occ===null){ res.push({r:nr,c:nc}); return; } const opp=getDieById(occ); if(opp && opp.owner!==piece.owner){ res.push({r:nr,c:nc}); } };
+  const ray=(dr,dc)=>{ let nr=r+dr, nc=c+dc; while(inBoundsRC(nr,nc)){ const occ=game.board[nr][nc]; if(occ===null){ res.push({r:nr,c:nc}); nr+=dr; nc+=dc; continue; } const opp=getDieById(occ); if(opp && opp.owner!==piece.owner){ res.push({r:nr,c:nc}); } break; } };
+  switch(piece.face){
+    case '歩': addIf(r+dir,c); break;
+    case '香': ray(dir,0); break;
+    case '桂': addIf(r+2*dir,c+1); addIf(r+2*dir,c-1); break;
+    case '銀': addIf(r+dir,c); addIf(r+dir,c-1); addIf(r+dir,c+1); addIf(r-dir,c-1); addIf(r-dir,c+1); break;
+    case '金': addIf(r+dir,c); addIf(r+dir,c-1); addIf(r+dir,c+1); addIf(r,c-1); addIf(r,c+1); addIf(r-dir,c); break;
+    case '角': ray(+1,+1); ray(+1,-1); ray(-1,+1); ray(-1,-1); break;
+    case '飛': ray(+1,0); ray(-1,0); ray(0,+1); ray(0,-1); break;
+    case '王': addIf(r+1,c); addIf(r-1,c); addIf(r,c+1); addIf(r,c-1); addIf(r+1,c+1); addIf(r+1,c-1); addIf(r-1,c+1); addIf(r-1,c-1); break;
+  }
+  return res;
+}
+
+/** DnD：親フェーズ配分（小駒＋先手） + タップ配分 **/
+function makePoolCard(d){
+  const card=document.createElement('div'); card.className='die-card';
+  const ownerTag=d.owner ? (d.owner===SIDES.RED?'<span class="tag red">赤</span>':'<span class="tag blue">青</span>') : '<span class="tag none">未</span>';
+  const draggable=(d.type!=='G_RED'&&d.type!=='G_BLUE'&&game.phase==='PARENT');
+  if(draggable){ card.classList.add('draggable'); card.setAttribute('draggable','true'); }
+  card.innerHTML=`<div class="die-title">${dieLabel(d.type)}</div><div class="die-face">${d.face}</div><div>${ownerTag}</div>${(d.type==='G_RED'||d.type==='G_BLUE')?'<div class="legend">（大将は固定）</div>':''}`;
+  if(draggable){ card.addEventListener('dragstart',(ev)=>{ ev.dataTransfer.setData('text/dice-id', String(d.id)); ev.dataTransfer.dropEffect='move'; }); }
+  // タップ配分
+  card.addEventListener('click',()=>{ if(game.ui.tapMode) selectAssignDie(d.id); });
+  // 選択状態見た目
+  if(game.ui.tapMode && game.ui.selectedAssignId===d.id) card.classList.add('selected-card');
+  return card;
+}
+function bindBinUI(binEl, owner){
+  // DnD
+  binEl.addEventListener('dragover',(ev)=>{
+    const types = ev.dataTransfer.types;
+    const hasDice = types && Array.from(types).includes('text/dice-id');
+    const hasMarker = types && Array.from(types).includes('text/first-marker');
+    if(hasDice || hasMarker){ ev.preventDefault(); binEl.classList.add('hilite'); }
+  });
+  binEl.addEventListener('dragleave',()=> binEl.classList.remove('hilite'));
+  binEl.addEventListener('drop',(ev)=>{
+    ev.preventDefault(); binEl.classList.remove('hilite');
+    if(game.phase!=='PARENT') return;
+    const markerId = ev.dataTransfer.getData('text/first-marker');
+    const diceId = ev.dataTransfer.getData('text/dice-id');
+
+    if(markerId){
+      game.firstMarker = owner || null;
+      renderAll();
+      return;
+    }
+    if(diceId){
+      const id=Number(diceId); const d=getDieById(id); if(!d) return;
+      if(d.type==='G_RED'||d.type==='G_BLUE') return;
+      d.owner = owner || null;
+      renderAll();
+    }
+  });
+  // タップ配分
+  binEl.addEventListener('click',()=> tapBin(owner));
+  // 見た目
+  if(game.ui.tapMode && game.ui.selectedBin===owner) binEl.classList.add('selected-bin');
+}
+
+/** DnD：先手マーカー **/
+function setupMarkerToken(){
+  const markerEl = document.getElementById('firstMarkerToken');
+  if(!markerEl) return;
+  // DnD
+  markerEl.setAttribute('draggable','true');
+  markerEl.addEventListener('dragstart',(ev)=>{
+    ev.dataTransfer.setData('text/first-marker','FIRST');
+    ev.dataTransfer.dropEffect='move';
+  });
+  // タップ選択
+  markerEl.addEventListener('click', selectMarker);
+  // 色更新
+  const dot = markerEl.querySelector('.marker-dot');
+  dot.className='marker-dot ' + (game.firstMarker===SIDES.RED?'marker-red':game.firstMarker===SIDES.BLUE?'marker-blue':'marker-none');
+}
+
+/** DnD：持ち駒→盤 + タップ打ち **/
+function makeHandItem(d){
+  const it=document.createElement('div'); it.className='hand-item '+(d.owner===SIDES.RED?'red':'blue'); it.setAttribute('draggable','true');
+  const label=document.createElement('span'); label.className='face-label '+(d.owner===SIDES.RED?'face-red':'face-blue'); label.textContent=d.face; it.appendChild(label);
+  it.addEventListener('dragstart',(ev)=>{ ev.dataTransfer.setData('text/hand-piece-id', String(d.id)); ev.dataTransfer.dropEffect='move'; });
+  it.addEventListener('click',()=>{
+    if(game.phase!=='PLAY') return; if(d.owner!==game.turn) return;
+    game.pendingDropPieceId=d.id; document.getElementById('cancelDrop').style.display='inline-block';
+    const st=document.getElementById('status'); if(st) st.textContent='持ち駒を選択：置きたいマスをタップしてください（全マスOK）。';
+    renderAll();
+  });
+  if(game.pendingDropPieceId===d.id) it.classList.add('selected');
+  it.title=dieLabel(d.type); return it;
+}
+function bindBoardDropEvents(cellEl, r, c){
+  cellEl.addEventListener('dragover',(ev)=>{
+    if(game.phase==='PLAY'){
+      const hasPiece=!!ev.dataTransfer.types?.includes('text/hand-piece-id');
+      if(hasPiece && game.board[r][c]===null){ ev.preventDefault(); cellEl.classList.add('drop-hilite'); }
+    }
+  });
+  cellEl.addEventListener('dragleave',()=> cellEl.classList.remove('drop-hilite'));
+  cellEl.addEventListener('drop',(ev)=>{
+    cellEl.classList.remove('drop-hilite');
+    if(game.phase!=='PLAY') return;
+    const idStr=ev.dataTransfer.getData('text/hand-piece-id'); if(!idStr) return;
+    const id=Number(idStr); if(game.board[r][c]!==null) return;
+    const piece=getDieById(id); if(!piece) return;
+    if(piece.owner!==game.turn) return;
+    piece.pos={r,c}; game.board[r][c]=piece.id; removeFromHand(game.turn, piece.id); document.getElementById('cancelDrop').style.display='none'; endTurn();
+  });
+}
+
+/** 描画 **/
+function renderAll(){
+  renderParentPoolAndBins();
+  renderBoard();
+  renderHands();
+}
+
+function renderParentPoolAndBins(){
+  const poolEl=document.getElementById('dicePool'); if(!poolEl) return; poolEl.innerHTML='';
+  for(const d of game.dice){ poolEl.appendChild(makePoolCard(d)); }
+
+  setupMarkerToken();
+
+  const redList=document.getElementById('binRedList'), noneList=document.getElementById('binNoneList'), blueList=document.getElementById('binBlueList');
+  if(redList) redList.innerHTML=''; if(noneList) noneList.innerHTML=''; if(blueList) blueList.innerHTML='';
+
+  for(const d of game.dice){
+    if(d.type==='A'||d.type==='B'){
+      const card=makePoolCard(d);
+      if(d.owner===SIDES.RED) redList?.appendChild(card);
+      else if(d.owner===SIDES.BLUE) blueList?.appendChild(card);
+      else noneList?.appendChild(card);
+    }
+  }
+  // 各陣に大将カード（参照）
+  const gRed = game.dice.find(x=>x.type==='G_RED');
+  const gBlue = game.dice.find(x=>x.type==='G_BLUE');
+  if(gRed && redList){
+    const card = document.createElement('div'); card.className='die-card';
+    card.innerHTML = `<div class="die-title">${dieLabel(gRed.type)}</div><div class="die-face">${gRed.face}</div><div class="tag red">赤大将</div>`;
+    redList.appendChild(card);
+  }
+  if(gBlue && blueList){
+    const card = document.createElement('div'); card.className='die-card';
+    card.innerHTML = `<div class="die-title">${dieLabel(gBlue.type)}</div><div class="die-face">${gBlue.face}</div><div class="tag blue">青大将</div>`;
+    blueList.appendChild(card);
+  }
+
+  // 先手バッジ
+  const badgeRed = document.getElementById('badgeRed');
+  const badgeBlue = document.getElementById('badgeBlue');
+  if(badgeRed) badgeRed.style.display = (game.firstMarker===SIDES.RED)? 'inline-block':'none';
+  if(badgeBlue) badgeBlue.style.display = (game.firstMarker===SIDES.BLUE)? 'inline-block':'none';
+
+  // ビンUI
+  bindBinUI(document.getElementById('binRed'), SIDES.RED);
+  bindBinUI(document.getElementById('binBlue'), SIDES.BLUE);
+  bindBinUI(document.getElementById('binNone'), null);
+
+  // タップモードトグル初期値
+  const chk=document.getElementById('tapModeToggle');
+  if(chk){ chk.checked = !!game.ui.tapMode; }
+}
+
+function renderBoard(){
+  const boardEl=document.getElementById('board'); if(!boardEl) return; boardEl.innerHTML='';
+  for(let r=0;r<BOARD_ROWS;r++){
+    for(let c=0;c<BOARD_COLS;c++){
+      const cell=document.createElement('div'); cell.className='cell';
+      if(isRedTerritory(r)) cell.classList.add('territory-red');
+      if(isBlueTerritory(r)) cell.classList.add('territory-blue');
+      if(game.turn===SIDES.RED && isRedTerritory(r)) cell.classList.add('own-strong');
+      if(game.turn===SIDES.BLUE && isBlueTerritory(r)) cell.classList.add('own-strong');
+
+      const pid=game.board[r][c];
+      if(pid!==null){
+        const p=getDieById(pid);
+        if(p){
+          const elp=document.createElement('div'); elp.className='piece '+(p.owner===SIDES.RED?'red':'blue')+(p.type==='A'||p.type==='B'?' small':'');
+          const label=document.createElement('span'); label.className='face-label '+(p.owner===SIDES.RED?'face-red':'face-blue'); label.textContent=p.face;
+          elp.appendChild(label);
+          if(game.selectedPieceId===pid) elp.classList.add('selected');
+          cell.appendChild(elp);
+        }
+      }
+      // 親フェーズのゴースト大将（固定位置）
+      if(game.phase==='PARENT' && pid===null){
+        const gRed = game.dice.find(x=>x.type==='G_RED');
+        const gBlue = game.dice.find(x=>x.type==='G_BLUE');
+        if(r===0 && c===1 && gRed){
+          const elp=document.createElement('div'); elp.className='piece red ghost';
+          const label=document.createElement('span'); label.className='face-label face-red'; label.textContent=gRed.face;
+          elp.appendChild(label); cell.appendChild(elp);
+        }
+        if(r===3 && c===1 && gBlue){
+          const elp=document.createElement('div'); elp.className='piece blue ghost';
+          const label=document.createElement('span'); label.className='face-label face-blue'; label.textContent=gBlue.face;
+          elp.appendChild(label); cell.appendChild(elp);
+        }
+      }
+
+      if(game.phase==='PLAY' && game.selectedPieceId!==null){
+        const selected=getDieById(game.selectedPieceId);
+        if(selected && selected.pos){
+          const legal=computeLegalMoves(selected);
+          if(legal.some(t=>t.r===r && t.c===c)) cell.classList.add('hilight');
+        }
+      }
+
+      cell.addEventListener('click',()=> onCellClick(r,c));
+      bindBoardDropEvents(cell, r, c);
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function renderHands(){
+  const redEl=document.getElementById('redHand'), blueEl=document.getElementById('blueHand'); if(!redEl||!blueEl) return;
+  redEl.innerHTML=''; blueEl.innerHTML='';
+  for(const d of game.hands.RED){ redEl.appendChild(makeHandItem(d)); }
+  for(const d of game.hands.BLUE){ blueEl.appendChild(makeHandItem(d)); }
+}
+
+/** イベント **/
+document.getElementById('rerollAll')?.addEventListener('click', rerollAllDice);
+document.getElementById('lockAssignment')?.addEventListener('click', lockAssignment);
+document.getElementById('chooseRed')?.addEventListener('click', ()=> chooseSide(SIDES.RED));
+document.getElementById('chooseBlue')?.addEventListener('click', ()=> chooseSide(SIDES.BLUE));
+
+document.getElementById('tapModeToggle')?.addEventListener('change', onTapToggle);
+document.getElementById('cancelAssign')?.addEventListener('click', cancelAssign);
+document.getElementById('cancelDrop')?.addEventListener('click', ()=>{
+  game.pendingDropPieceId=null;
+  document.getElementById('cancelDrop').style.display='none';
+  const st=document.getElementById('status'); if(st) st.textContent='対局中：持ち駒をタップ→盤タップで打てます。';
+  renderAll();
+});
+
+/** 起動 **/
+initParentPhase();
+});
+</script>
+</body>
+</html>
